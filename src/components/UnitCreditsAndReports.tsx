@@ -8,13 +8,17 @@ import {
   FuelRecord, 
   UnitCredit, 
   UserProfile, 
-  FuelInventory 
+  FuelInventory,
+  UnitFuelReceipt
 } from '../types';
 import { 
   getUnitCredits, 
   updateUnitCreditLimit, 
   resetUnitCredit, 
-  unitCreditsCol 
+  unitCreditsCol,
+  unitReceiptsCol,
+  addUnitFuelReceipt,
+  deleteUnitFuelReceipt
 } from '../lib/db-helpers';
 import { onSnapshot, query, orderBy } from 'firebase/firestore';
 import { 
@@ -45,7 +49,11 @@ import {
   Building,
   CheckCircle2,
   ChevronRight,
-  Info
+  Info,
+  Trash2,
+  Download,
+  History,
+  FileSpreadsheet
 } from 'lucide-react';
 
 interface UnitCreditsAndReportsProps {
@@ -63,7 +71,7 @@ export default function UnitCreditsAndReports({
 }: UnitCreditsAndReportsProps) {
   
   const [unitCredits, setUnitCredits] = useState<UnitCredit[]>([]);
-  const [activeSubTab, setActiveSubTab] = useState<'credits' | 'reports'>('credits');
+  const [activeSubTab, setActiveSubTab] = useState<'credits' | 'reports' | 'receipts'>('credits');
   const [isLoading, setIsLoading] = useState(true);
 
   // Form State for Adding / Modifying Credits
@@ -78,6 +86,26 @@ export default function UnitCreditsAndReports({
   });
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
+
+  // Unit Receipts State
+  const [receipts, setReceipts] = useState<UnitFuelReceipt[]>([]);
+  const [showAddReceiptModal, setShowAddReceiptModal] = useState(false);
+  const [receiptUnit, setReceiptUnit] = useState('');
+  const [receiptFuelType, setReceiptFuelType] = useState('น้ำมันดีเซล');
+  const [receiptVolume, setReceiptVolume] = useState<number | ''>('');
+  const [receiptDocNo, setReceiptDocNo] = useState('');
+  const [receiptActionType, setReceiptActionType] = useState<'allocate' | 'draw_bulk'>('allocate');
+  const [receiptDeductFromInventory, setReceiptDeductFromInventory] = useState(false);
+  const [receiptNotes, setReceiptNotes] = useState('');
+  const [receiptDate, setReceiptDate] = useState('');
+  const [receiptTime, setReceiptTime] = useState('');
+  const [receiptError, setReceiptError] = useState('');
+  const [receiptSuccess, setReceiptSuccess] = useState('');
+  const [receiptLoading, setReceiptLoading] = useState(false);
+
+  // Receipts filters
+  const [receiptFilterUnit, setReceiptFilterUnit] = useState('all');
+  const [receiptFilterFuelType, setReceiptFilterFuelType] = useState('all');
 
   // Report Filter State
   const [filterUnit, setFilterUnit] = useState<string>(() => {
@@ -118,6 +146,39 @@ export default function UnitCreditsAndReports({
     });
     return () => unsubscribe();
   }, []);
+
+  // Subscribe to Unit Fuel Receipts Real-Time Update
+  useEffect(() => {
+    const q = query(unitReceiptsCol);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list: UnitFuelReceipt[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as UnitFuelReceipt);
+      });
+      // Sort by createdAt descending
+      list.sort((a, b) => b.createdAt - a.createdAt);
+      setReceipts(list);
+    }, (error) => {
+      console.error("Error subscribing to unit receipts: ", error);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Initialize receipt date and time when opening modal
+  useEffect(() => {
+    if (showAddReceiptModal) {
+      const now = new Date();
+      const localDate = now.toISOString().split('T')[0];
+      const localTime = now.toTimeString().split(' ')[0].substring(0, 5);
+      setReceiptDate(localDate);
+      setReceiptTime(localTime);
+      
+      // Default to first credit unit if available
+      if (unitCredits.length > 0) {
+        setReceiptUnit(unitCredits[0].unit);
+      }
+    }
+  }, [showAddReceiptModal, unitCredits]);
 
   // Set default custom dates if not selected
   useEffect(() => {
@@ -206,6 +267,89 @@ export default function UnitCreditsAndReports({
     }
   };
 
+  // Save fuel receipt
+  const handleSaveReceipt = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setReceiptError('');
+    setReceiptSuccess('');
+
+    if (!receiptUnit) {
+      setReceiptError('กรุณาเลือกหน่วยงาน');
+      return;
+    }
+    if (!receiptFuelType) {
+      setReceiptError('กรุณาเลือกประเภทน้ำมัน');
+      return;
+    }
+    if (!receiptVolume || Number(receiptVolume) <= 0) {
+      setReceiptError('กรุณากรอกจำนวนน้ำมันให้ถูกต้อง (มากกว่า 0)');
+      return;
+    }
+    if (!receiptDocNo.trim()) {
+      setReceiptError('กรุณากรอกเลขที่เอกสารจัดสรร/ใบรับน้ำมัน');
+      return;
+    }
+    if (!receiptDate || !receiptTime) {
+      setReceiptError('กรุณาระบุวันและเวลา');
+      return;
+    }
+
+    // Optional stock deduction check
+    if (receiptDeductFromInventory) {
+      const targetStock = inventory.find(i => i.fuelType === receiptFuelType);
+      if (targetStock && Number(receiptVolume) > targetStock.currentStock) {
+        setReceiptError(`ปริมาณน้ำมันที่จะหักจ่าย สูงกว่ายอดน้ำมันดิบคงเหลือในคลังหลัก (คงเหลือ ${targetStock.currentStock.toLocaleString()} ลิตร)`);
+        return;
+      }
+    }
+
+    setReceiptLoading(true);
+
+    try {
+      await addUnitFuelReceipt({
+        date: receiptDate,
+        time: receiptTime,
+        unit: receiptUnit,
+        fuelType: receiptFuelType,
+        volume: Number(receiptVolume),
+        docNo: receiptDocNo.trim(),
+        actionType: receiptActionType,
+        deductFromInventory: receiptDeductFromInventory,
+        notes: receiptNotes.trim(),
+        officerId: currentUser.uid,
+        officerName: `${currentUser.rank} ${currentUser.name}`
+      });
+
+      setReceiptSuccess('บันทึกการส่งมอบ/รับน้ำมันให้กับหน่วยงานเสร็จสิ้น!');
+      setTimeout(() => {
+        setShowAddReceiptModal(false);
+        // Clear state
+        setReceiptVolume('');
+        setReceiptDocNo('');
+        setReceiptNotes('');
+        setReceiptDeductFromInventory(false);
+        setReceiptActionType('allocate');
+        setReceiptSuccess('');
+      }, 1200);
+    } catch (err: any) {
+      setReceiptError('เกิดข้อผิดพลาดในการบันทึก: ' + err.message);
+    } finally {
+      setReceiptLoading(false);
+    }
+  };
+
+  // Delete/Revert receipt
+  const handleDeleteReceipt = async (receiptId: string) => {
+    if (window.confirm('คุณแน่ใจหรือไม่ที่จะลบรายการรับน้ำมันนี้? การลบจะย้อนคืนปริมาณโควตาและสต็อกของคลังน้ำมันหลักโดยอัตโนมัติ')) {
+      try {
+        await deleteUnitFuelReceipt(receiptId);
+        alert('ลบรายการและคืนค่าสถานะเรียบร้อยแล้ว');
+      } catch (err: any) {
+        alert('เกิดข้อผิดพลาดในการลบ: ' + err.message);
+      }
+    }
+  };
+
   // Filtering Records for Report tab
   const filteredRecordsForReport = useMemo(() => {
     return records.filter(r => {
@@ -249,6 +393,22 @@ export default function UnitCreditsAndReports({
       return true;
     });
   }, [records, filterUnit, filterFuelType, filterDateRange, filterStartDate, filterEndDate, currentUser]);
+
+  // Filtering Receipts for unit-receipts tab
+  const filteredReceipts = useMemo(() => {
+    return receipts.filter(r => {
+      // General users can only see their own department's receipts
+      if (currentUser.role === 'user' && r.unit !== currentUser.department) return false;
+
+      // Unit filter
+      if (currentUser.role !== 'user' && receiptFilterUnit !== 'all' && r.unit !== receiptFilterUnit) return false;
+
+      // Fuel type filter
+      if (receiptFilterFuelType !== 'all' && r.fuelType !== receiptFilterFuelType) return false;
+
+      return true;
+    });
+  }, [receipts, receiptFilterUnit, receiptFilterFuelType, currentUser]);
 
   // Aggregate stats from filtered records
   const totalReportDispensed = useMemo(() => {
@@ -354,6 +514,17 @@ export default function UnitCreditsAndReports({
             >
               <BarChart3 className="h-3.5 w-3.5" />
               <span>สรุปรายงานยอด</span>
+            </button>
+            <button
+              onClick={() => setActiveSubTab('receipts')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                activeSubTab === 'receipts' 
+                  ? 'bg-emerald-500 text-slate-950 shadow-md' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <History className="h-3.5 w-3.5" />
+              <span>ประวัติรับน้ำมัน/จัดสรรโควตา</span>
             </button>
           </div>
         </div>
@@ -876,6 +1047,206 @@ export default function UnitCreditsAndReports({
         </div>
       )}
 
+      {/* SUB-TAB 3: UNIT FUEL RECEIPTS & BULK DRAWS */}
+      {activeSubTab === 'receipts' && (
+        <div className="space-y-6">
+          
+          {/* Controls & Filter Panel */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <History className="h-4 w-4 text-emerald-400" />
+                ประวัติการรับน้ำมัน และการจัดสรรโควตารายหน่วย
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                บันทึกประวัติการรับน้ำมันเข้าโควตาและการจ่ายน้ำมันดิบให้กับหน่วยงานในสังกัด มทบ.44
+              </p>
+            </div>
+
+            {(currentUser.role === 'admin' || currentUser.role === 'officer') && (
+              <button
+                onClick={() => setShowAddReceiptModal(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition cursor-pointer self-stretch sm:self-auto justify-center"
+              >
+                <Plus className="h-4 w-4" />
+                <span>บันทึกส่งมอบ/รับน้ำมัน</span>
+              </button>
+            )}
+          </div>
+
+          {/* Filters for Receipts */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-lg">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Filter Unit */}
+              <div className="space-y-1">
+                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">หน่วยงาน</label>
+                <select
+                  value={receiptFilterUnit}
+                  onChange={(e) => setReceiptFilterUnit(e.target.value)}
+                  disabled={currentUser.role === 'user'}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-60"
+                >
+                  {(currentUser.role === 'admin' || currentUser.role === 'officer') ? (
+                    <>
+                      <option value="all">ทั้งหมด ทุกหน่วยงาน</option>
+                      {unitCredits.map(uc => (
+                        <option key={uc.id} value={uc.unit}>{uc.unit}</option>
+                      ))}
+                    </>
+                  ) : (
+                    <option value={currentUser.department}>{currentUser.department}</option>
+                  )}
+                </select>
+              </div>
+
+              {/* Filter Fuel Type */}
+              <div className="space-y-1">
+                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">ประเภทน้ำมัน</label>
+                <select
+                  value={receiptFilterFuelType}
+                  onChange={(e) => setReceiptFilterFuelType(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                >
+                  <option value="all">ทั้งหมด ทุกประเภท</option>
+                  {inventory.map(inv => (
+                    <option key={inv.id} value={inv.fuelType}>{inv.fuelType}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* List of Receipts */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Receipts table */}
+            <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-lg space-y-4">
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <FileSpreadsheet className="h-4 w-4 text-emerald-400" />
+                <span>รายการบันทึกส่งจ่ายและรับน้ำมันสิทธิ์ของหน่วย ({filteredReceipts.length} รายการ)</span>
+              </h3>
+
+              {filteredReceipts.length === 0 ? (
+                <div className="text-center py-12 text-slate-500 text-xs bg-slate-950 rounded-2xl border border-slate-850">
+                  ไม่มีรายการบันทึกรับน้ำมันหรือจัดสรรโควตาใดๆ ที่ตรงตามเงื่อนไข
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-slate-800">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-950 text-slate-400 border-b border-slate-800 font-bold">
+                        <th className="p-3">วันที่/เวลา</th>
+                        <th className="p-3">เลขที่เอกสาร</th>
+                        <th className="p-3">หน่วยรับ</th>
+                        <th className="p-3">ประเภทน้ำมัน</th>
+                        <th className="p-3 text-right">จำนวน (ลิตร)</th>
+                        <th className="p-3">ประเภทรายการ</th>
+                        <th className="p-3">ผู้บันทึก</th>
+                        {(currentUser.role === 'admin' || currentUser.role === 'officer') && <th className="p-3 text-center">จัดการ</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-850 bg-slate-900/50">
+                      {filteredReceipts.map((r) => {
+                        const isAllocate = r.actionType === 'allocate';
+                        return (
+                          <tr key={r.id} className="hover:bg-slate-950/40 text-slate-300 transition">
+                            <td className="p-3 whitespace-nowrap">{formatThaiDate(r.date)} <span className="text-[10px] text-slate-500 block font-mono">{r.time} น.</span></td>
+                            <td className="p-3 font-mono text-white max-w-[120px] truncate" title={r.docNo}>{r.docNo}</td>
+                            <td className="p-3 font-semibold text-slate-200">{r.unit}</td>
+                            <td className="p-3 whitespace-nowrap">{r.fuelType}</td>
+                            <td className="p-3 text-right font-extrabold text-white font-mono">
+                              {r.volume.toLocaleString()}
+                              {r.deductFromInventory && <span className="text-[9px] text-slate-500 block font-normal">(ตัดจากคลังหลัก)</span>}
+                            </td>
+                            <td className="p-3">
+                              <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${
+                                isAllocate 
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                                  : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                              }`}>
+                                {isAllocate ? 'จัดสรรโควตาเพิ่ม' : 'จ่ายหักยอดคลังค้าง'}
+                              </span>
+                            </td>
+                            <td className="p-3 text-slate-400 font-medium">
+                              {r.officerName || 'เจ้าหน้าที่'}
+                              {r.notes && <span className="text-[9px] text-slate-500 block truncate max-w-[150px]" title={r.notes}>{r.notes}</span>}
+                            </td>
+                            {(currentUser.role === 'admin' || currentUser.role === 'officer') && (
+                              <td className="p-3 text-center">
+                                <button
+                                  onClick={() => handleDeleteReceipt(r.id)}
+                                  className="p-1.5 hover:bg-red-500/10 text-slate-500 hover:text-red-400 rounded-lg transition cursor-pointer"
+                                  title="ลบรายการนี้และย้อนคืนสต็อก/โควตา"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Receipts summary metrics side cards */}
+            <div className="space-y-6">
+              
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-lg space-y-4">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">ข้อมูลสรุปภาพรวมใบงาน</h4>
+                
+                <div className="space-y-4 divide-y divide-slate-800">
+                  <div className="pt-2 flex justify-between items-center text-xs">
+                    <span className="text-slate-400">รายการรับ/ส่งมอบทั้งหมด:</span>
+                    <strong className="text-white text-sm font-mono font-bold">{filteredReceipts.length} รายการ</strong>
+                  </div>
+
+                  <div className="pt-4 flex justify-between items-center text-xs">
+                    <span className="text-slate-400">ยอดรวมจัดสรรโควตาเพิ่ม:</span>
+                    <strong className="text-emerald-400 text-sm font-mono font-black">
+                      {filteredReceipts
+                        .filter(r => r.actionType === 'allocate')
+                        .reduce((sum, r) => sum + r.volume, 0)
+                        .toLocaleString()} ลิตร
+                    </strong>
+                  </div>
+
+                  <div className="pt-4 flex justify-between items-center text-xs">
+                    <span className="text-slate-400">ยอดรวมจ่ายเบิกใหญ่ (Bulk):</span>
+                    <strong className="text-blue-400 text-sm font-mono font-black">
+                      {filteredReceipts
+                        .filter(r => r.actionType === 'draw_bulk')
+                        .reduce((sum, r) => sum + r.volume, 0)
+                        .toLocaleString()} ลิตร
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Informational Panel */}
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-lg space-y-3">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Info className="h-4 w-4 text-emerald-400" />
+                  <span>คำอธิบายระบบรับส่งมอบ</span>
+                </h4>
+                <p className="text-slate-400 text-xs leading-relaxed">
+                  ระบบ <strong>"รับมอบ/จัดสรรน้ำมันให้กับหน่วยงาน"</strong> มีเพื่อรองรับการจ่ายน้ำมันสองรูปแบบหลัก:
+                </p>
+                <ul className="list-disc list-inside text-slate-400 text-xs space-y-1 pl-1">
+                  <li><strong>จัดสรรโควตาเพิ่ม:</strong> จะเพิ่มจำนวนเครดิตโควตาของหน่วยงานนั้นๆ โดยตรงเพื่อให้เบิกแยกที่คลังต่อได้</li>
+                  <li><strong>จ่ายหักยอดคลังค้าง (Bulk Draw):</strong> จ่ายตรงให้กับหน่วยงานโดยการหักจากโควตาเครดิตของหน่วยและหักลบปริมาณน้ำมันในสต็อกคลังหลักพร้อมกันในคราวเดียว</li>
+                </ul>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
       {/* MODAL: ADD / EDIT UNIT LIMIT QUOTA */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -991,6 +1362,212 @@ export default function UnitCreditsAndReports({
                   className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-xl transition cursor-pointer"
                 >
                   บันทึกข้อมูล
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD UNIT FUEL RECEIPT */}
+      {showAddReceiptModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative overflow-hidden my-8">
+            <h3 className="text-base font-bold text-white mb-2 flex items-center gap-2">
+              <Plus className="h-5 w-5 text-emerald-400" />
+              <span>บันทึกการส่งมอบ / รับน้ำมันให้หน่วยงาน</span>
+            </h3>
+            <p className="text-xs text-slate-400 mb-4">
+              เพิ่มโควตาน้ำมันจัดสรรรายเดือน หรือเบิกจ่ายน้ำมันดิบปริมาณมากให้กับหน่วยงานในเครือ มทบ.44
+            </p>
+
+            <form onSubmit={handleSaveReceipt} className="space-y-4">
+              
+              {/* Unit Select */}
+              <div className="space-y-1">
+                <label className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">เลือกหน่วยงานที่รับมอบ</label>
+                <select
+                  value={receiptUnit}
+                  onChange={(e) => setReceiptUnit(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  required
+                >
+                  <option value="">-- กรุณาเลือกหน่วยงาน --</option>
+                  {unitCredits.map(uc => (
+                    <option key={uc.id} value={uc.unit}>{uc.unit}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Fuel Type */}
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">ประเภทน้ำมัน</label>
+                  <select
+                    value={receiptFuelType}
+                    onChange={(e) => setReceiptFuelType(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    required
+                  >
+                    {inventory.map(inv => (
+                      <option key={inv.id} value={inv.fuelType}>{inv.fuelType}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Volume */}
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">จำนวนน้ำมัน (ลิตร)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="ระบุจำนวนน้ำมันที่เบิกจ่าย"
+                    value={receiptVolume}
+                    onChange={(e) => setReceiptVolume(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Action Type */}
+              <div className="space-y-1">
+                <label className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">ประเภทรายการ</label>
+                <div className="grid grid-cols-2 gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReceiptActionType('allocate');
+                      setReceiptDeductFromInventory(false);
+                    }}
+                    className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                      receiptActionType === 'allocate'
+                        ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    จัดสรรโควตาเพิ่ม
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReceiptActionType('draw_bulk');
+                      setReceiptDeductFromInventory(true);
+                    }}
+                    className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                      receiptActionType === 'draw_bulk'
+                        ? 'bg-blue-500 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    หักโควตา & เบิกจากคลังใหญ่ (Bulk)
+                  </button>
+                </div>
+              </div>
+
+              {/* Deduct From Inventory Checkbox */}
+              <div className="flex items-center gap-2 p-2 bg-slate-950 rounded-xl border border-slate-800">
+                <input
+                  type="checkbox"
+                  id="receiptDeductFromInventory"
+                  checked={receiptDeductFromInventory}
+                  onChange={(e) => setReceiptDeductFromInventory(e.target.checked)}
+                  className="rounded border-slate-800 bg-slate-900 text-emerald-500 focus:ring-0 focus:ring-offset-0"
+                />
+                <label htmlFor="receiptDeductFromInventory" className="text-xs text-slate-300 select-none cursor-pointer">
+                  ตัดยอดสต็อกน้ำมันคงเหลือออกจาก <strong>"คลังน้ำมันใหญ่"</strong> พร้อมกันด้วย
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Date */}
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">วันที่ดำเนินงาน</label>
+                  <input
+                    type="date"
+                    value={receiptDate}
+                    onChange={(e) => setReceiptDate(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                    required
+                  />
+                </div>
+
+                {/* Time */}
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">เวลาดำเนินงาน</label>
+                  <input
+                    type="time"
+                    value={receiptTime}
+                    onChange={(e) => setReceiptTime(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Doc No */}
+              <div className="space-y-1">
+                <label className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">เลขที่ใบสั่งจัดสรร / เอกสารอนุมัติรับน้ำมัน</label>
+                <input
+                  type="text"
+                  placeholder="เช่น กห ๐๔๘๑.๘/๕๖๗ หรือเลขที่ใบรับ"
+                  value={receiptDocNo}
+                  onChange={(e) => setReceiptDocNo(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  required
+                />
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-1">
+                <label className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">บันทึกเพิ่มเติม (ถ้ามี)</label>
+                <textarea
+                  placeholder="รายละเอียดเพิ่มเติม เช่น ลายเซ็นต์คนขับ หรือหมายเหตุราชการอื่นๆ"
+                  value={receiptNotes}
+                  onChange={(e) => setReceiptNotes(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-500 min-h-[60px]"
+                />
+              </div>
+
+              {/* Status Indicator */}
+              {receiptError && (
+                <div className="p-3 bg-red-500/10 text-red-400 border border-red-500/20 text-xs rounded-xl flex items-center gap-1.5">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>{receiptError}</span>
+                </div>
+              )}
+
+              {receiptSuccess && (
+                <div className="p-3 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs rounded-xl flex items-center gap-1.5">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <span>{receiptSuccess}</span>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddReceiptModal(false)}
+                  className="px-4 py-2 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
+                  disabled={receiptLoading}
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5"
+                  disabled={receiptLoading}
+                >
+                  {receiptLoading ? (
+                    <>
+                      <RefreshCw className="h-3 w-3 animate-spin" />
+                      <span>กำลังบันทึก...</span>
+                    </>
+                  ) : (
+                    <span>บันทึกส่งมอบ</span>
+                  )}
                 </button>
               </div>
 

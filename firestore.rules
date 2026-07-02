@@ -1,8 +1,70 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isOfficerOrAdmin() {
+      return isSignedIn() && (getUserData().role == 'officer' || getUserData().role == 'admin');
+    }
+    
+    // Catch-all default deny
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
+    }
+    
+    // User Profiles
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.auth.uid == uid;
+      allow delete: if isSignedIn() && getUserData().role == 'admin';
+    }
+    
+    // Fuel Records
+    match /fuel_records/{recordId} {
+      allow read: if isSignedIn();
+      allow create: if isOfficerOrAdmin();
+      allow update, delete: if isOfficerOrAdmin();
+    }
+    
+    // Fuel Requests
+    match /fuel_requests/{requestId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        isOfficerOrAdmin() || 
+        (resource.data.requestedBy == request.auth.uid && resource.data.status == 'pending')
+      );
+      allow delete: if isSignedIn() && (
+        isOfficerOrAdmin() || 
+        (resource.data.requestedBy == request.auth.uid && resource.data.status == 'pending')
+      );
+    }
+    
+    // Fuel Inventory
+    match /fuel_inventory/{inventoryId} {
+      allow read: if isSignedIn();
+      allow write: if isOfficerOrAdmin();
+    }
+    
+    // Unit Credits (Quotas)
+    match /unit_credits/{unitId} {
+      allow read: if isSignedIn();
+      allow write: if isOfficerOrAdmin();
+    }
+    
+    // Unit Receipts & Bulk Draws
+    match /unit_receipts/{receiptId} {
+      allow read: if isSignedIn();
+      allow create: if isOfficerOrAdmin();
+      allow update, delete: if isOfficerOrAdmin();
     }
   }
 }

@@ -121,6 +121,27 @@
         }
       },
       "required": ["id", "unit", "allocatedLimit", "usedCredit", "lastResetDate", "updatedAt"]
+    },
+    "UnitFuelReceipt": {
+      "title": "UnitFuelReceipt",
+      "description": "Log of allocating or drawing bulk fuel to/from unit quota",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "unit": { "type": "string" },
+        "fuelType": { "type": "string" },
+        "volume": { "type": "number" },
+        "docNo": { "type": "string" },
+        "actionType": { "type": "string", "enum": ["allocate", "draw_bulk"] },
+        "deductFromInventory": { "type": "boolean" },
+        "notes": { "type": "string" },
+        "officerId": { "type": "string" },
+        "officerName": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["date", "time", "unit", "fuelType", "volume", "docNo", "actionType", "deductFromInventory", "officerId", "officerName", "createdAt"]
     }
   },
   "firestore": {
@@ -143,6 +164,10 @@
     "unit_credits/{unitId}": {
       "schema": "UnitCredit",
       "description": "Unit fuel quota limits and current consumption"
+    },
+    "unit_receipts/{receiptId}": {
+      "schema": "UnitFuelReceipt",
+      "description": "Unit fuel receipts and bulk draw records"
     }
   }
 }

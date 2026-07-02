@@ -80,3 +80,20 @@ export interface UnitCredit {
   quotas?: Record<string, FuelQuota>; // รายการโควตาแยกชนิดน้ำมัน
 }
 
+export interface UnitFuelReceipt {
+  id: string;
+  date: string;
+  time: string;
+  unit: string;
+  fuelType: string;
+  volume: number;
+  docNo: string;
+  actionType: 'allocate' | 'draw_bulk';
+  deductFromInventory: boolean;
+  notes?: string;
+  officerId: string;
+  officerName: string;
+  createdAt: number;
+}
+
+

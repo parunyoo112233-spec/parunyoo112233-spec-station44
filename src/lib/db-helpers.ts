@@ -18,7 +18,7 @@ import {
   runTransaction
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import { FuelInventory, FuelRecord, FuelRequest, UserProfile, UnitCredit, UserRole } from '../types';
+import { FuelInventory, FuelRecord, FuelRequest, UserProfile, UnitCredit, UserRole, UnitFuelReceipt } from '../types';
 
 // Collection references
 export const usersCol = collection(db, 'users');
@@ -26,6 +26,7 @@ export const recordsCol = collection(db, 'fuel_records');
 export const requestsCol = collection(db, 'fuel_requests');
 export const inventoryCol = collection(db, 'fuel_inventory');
 export const unitCreditsCol = collection(db, 'unit_credits');
+export const unitReceiptsCol = collection(db, 'unit_receipts');
 
 const INITIAL_UNIT_CREDITS: UnitCredit[] = [
   { 
@@ -673,5 +674,172 @@ export async function updateUserStatus(uid: string, status: 'pending' | 'active'
     status: status
   });
 }
+
+/**
+ * Add a fuel receipt log for a unit, and optionally adjust quotas & main inventory
+ */
+export async function addUnitFuelReceipt(receipt: Omit<UnitFuelReceipt, 'id' | 'createdAt'>): Promise<string> {
+  const finalReceipt = {
+    ...receipt,
+    createdAt: Date.now()
+  };
+
+  const docRef = await addDoc(collection(db, 'unit_receipts'), finalReceipt);
+
+  // 1. If deductFromInventory is true, deduct from fuel_inventory
+  if (receipt.deductFromInventory) {
+    const invDocRef = doc(db, 'fuel_inventory', receipt.fuelType);
+    const invSnap = await getDoc(invDocRef);
+    if (invSnap.exists()) {
+      const currentData = invSnap.data() as FuelInventory;
+      const newStock = Math.max(0, currentData.currentStock - receipt.volume);
+      await updateDoc(invDocRef, {
+        currentStock: newStock,
+        updatedAt: Date.now()
+      });
+    }
+  }
+
+  // 2. Update unit credit depending on actionType
+  const creditDocRef = doc(db, 'unit_credits', receipt.unit);
+  const creditSnap = await getDoc(creditDocRef);
+
+  if (receipt.actionType === 'allocate') {
+    // Increase allocatedLimit for the fuelType and total
+    if (creditSnap.exists()) {
+      const creditData = creditSnap.data() as UnitCredit;
+      const currentQuotas = creditData.quotas || {
+        'น้ำมันดีเซล': { allocatedLimit: creditData.allocatedLimit || 5000, usedCredit: creditData.usedCredit },
+        'น้ำมันแก๊สโซฮอล์ 95': { allocatedLimit: 0, usedCredit: 0 },
+        'น้ำมันแก๊สโซฮอล์ 91': { allocatedLimit: 0, usedCredit: 0 }
+      };
+
+      if (!currentQuotas[receipt.fuelType]) {
+        currentQuotas[receipt.fuelType] = { allocatedLimit: 0, usedCredit: 0 };
+      }
+
+      currentQuotas[receipt.fuelType].allocatedLimit += receipt.volume;
+
+      const totalAllocated = Object.values(currentQuotas).reduce((sum, q) => sum + q.allocatedLimit, 0);
+
+      await updateDoc(creditDocRef, {
+        allocatedLimit: totalAllocated,
+        quotas: currentQuotas,
+        updatedAt: Date.now()
+      });
+    } else {
+      // Auto-create unit credit if it doesn't exist
+      const quotas = {
+        'น้ำมันดีเซล': { allocatedLimit: receipt.fuelType === 'น้ำมันดีเซล' ? receipt.volume : 0, usedCredit: 0 },
+        'น้ำมันแก๊สโซฮอล์ 95': { allocatedLimit: receipt.fuelType === 'น้ำมันแก๊สโซฮอล์ 95' ? receipt.volume : 0, usedCredit: 0 },
+        'น้ำมันแก๊สโซฮอล์ 91': { allocatedLimit: receipt.fuelType === 'น้ำมันแก๊สโซฮอล์ 91' ? receipt.volume : 0, usedCredit: 0 }
+      };
+      await setDoc(creditDocRef, {
+        id: receipt.unit,
+        unit: receipt.unit,
+        allocatedLimit: receipt.volume,
+        usedCredit: 0,
+        quotas,
+        lastResetDate: receipt.date,
+        updatedAt: Date.now()
+      });
+    }
+  } else if (receipt.actionType === 'draw_bulk') {
+    // Record as actual draw: increase usedCredit for the fuelType and total
+    if (creditSnap.exists()) {
+      const creditData = creditSnap.data() as UnitCredit;
+      const currentQuotas = creditData.quotas || {
+        'น้ำมันดีเซล': { allocatedLimit: creditData.allocatedLimit || 5000, usedCredit: creditData.usedCredit },
+        'น้ำมันแก๊สโซฮอล์ 95': { allocatedLimit: 0, usedCredit: 0 },
+        'น้ำมันแก๊สโซฮอล์ 91': { allocatedLimit: 0, usedCredit: 0 }
+      };
+
+      if (!currentQuotas[receipt.fuelType]) {
+        currentQuotas[receipt.fuelType] = { allocatedLimit: 0, usedCredit: 0 };
+      }
+
+      currentQuotas[receipt.fuelType].usedCredit += receipt.volume;
+
+      const totalUsed = Object.values(currentQuotas).reduce((sum, q) => sum + q.usedCredit, 0);
+
+      await updateDoc(creditDocRef, {
+        usedCredit: totalUsed,
+        quotas: currentQuotas,
+        updatedAt: Date.now()
+      });
+    } else {
+      // Auto-create unit credit if it doesn't exist (as usedCredit)
+      const quotas = {
+        'น้ำมันดีเซล': { allocatedLimit: 5000, usedCredit: receipt.fuelType === 'น้ำมันดีเซล' ? receipt.volume : 0 },
+        'น้ำมันแก๊สโซฮอล์ 95': { allocatedLimit: 0, usedCredit: receipt.fuelType === 'น้ำมันแก๊สโซฮอล์ 95' ? receipt.volume : 0 },
+        'น้ำมันแก๊สโซฮอล์ 91': { allocatedLimit: 0, usedCredit: receipt.fuelType === 'น้ำมันแก๊สโซฮอล์ 91' ? receipt.volume : 0 }
+      };
+      await setDoc(creditDocRef, {
+        id: receipt.unit,
+        unit: receipt.unit,
+        allocatedLimit: 5000,
+        usedCredit: receipt.volume,
+        quotas,
+        lastResetDate: receipt.date,
+        updatedAt: Date.now()
+      });
+    }
+  }
+
+  return docRef.id;
+}
+
+/**
+ * Delete a unit fuel receipt and safely revert changes
+ */
+export async function deleteUnitFuelReceipt(receiptId: string): Promise<void> {
+  const docRef = doc(db, 'unit_receipts', receiptId);
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) return;
+
+  const receipt = snap.data() as UnitFuelReceipt;
+
+  // 1. If it deducted from inventory, give it back
+  if (receipt.deductFromInventory) {
+    const invDocRef = doc(db, 'fuel_inventory', receipt.fuelType);
+    const invSnap = await getDoc(invDocRef);
+    if (invSnap.exists()) {
+      const currentData = invSnap.data() as FuelInventory;
+      const newStock = Math.min(currentData.capacity, currentData.currentStock + receipt.volume);
+      await updateDoc(invDocRef, {
+        currentStock: newStock,
+        updatedAt: Date.now()
+      });
+    }
+  }
+
+  // 2. Revert quota / used credit
+  const creditDocRef = doc(db, 'unit_credits', receipt.unit);
+  const creditSnap = await getDoc(creditDocRef);
+  if (creditSnap.exists()) {
+    const creditData = creditSnap.data() as UnitCredit;
+    const quotas = creditData.quotas;
+    if (quotas && quotas[receipt.fuelType]) {
+      if (receipt.actionType === 'allocate') {
+        quotas[receipt.fuelType].allocatedLimit = Math.max(0, quotas[receipt.fuelType].allocatedLimit - receipt.volume);
+      } else {
+        quotas[receipt.fuelType].usedCredit = Math.max(0, quotas[receipt.fuelType].usedCredit - receipt.volume);
+      }
+      
+      const totalAllocated = Object.values(quotas).reduce((sum, q) => sum + q.allocatedLimit, 0);
+      const totalUsed = Object.values(quotas).reduce((sum, q) => sum + q.usedCredit, 0);
+
+      await updateDoc(creditDocRef, {
+        allocatedLimit: totalAllocated,
+        usedCredit: totalUsed,
+        quotas,
+        updatedAt: Date.now()
+      });
+    }
+  }
+
+  await deleteDoc(docRef);
+}
+
 
 
