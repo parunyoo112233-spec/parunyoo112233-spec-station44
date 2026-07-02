@@ -534,6 +534,22 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 />
               </div>
 
+              {/* Role Selection */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider block">
+                  สิทธิ์การเข้าใช้งานที่ต้องการขอ (Role)
+                </label>
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as UserRole)}
+                  className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl focus:border-emerald-500 outline-none text-white text-sm transition"
+                >
+                  <option value="user" className="bg-slate-900">ผู้ใช้บริการทั่วไป (User/Driver)</option>
+                  <option value="officer" className="bg-slate-900">เจ้าหน้าที่คลังเชื้อเพลิง (Officer)</option>
+                  <option value="admin" className="bg-slate-900">ผู้ดูแลระบบ (Admin)</option>
+                </select>
+              </div>
+
             </div>
           )}
 

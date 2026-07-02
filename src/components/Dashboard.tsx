@@ -4,6 +4,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { 
   FuelInventory, 
   FuelRecord, 
@@ -76,6 +77,9 @@ export default function Dashboard({
 
   const [unitCredits, setUnitCredits] = useState<UnitCredit[]>([]);
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
+  const [overviewMode, setOverviewMode] = useState<'global' | 'unit'>(
+    (currentUser?.role === 'admin' || currentUser?.role === 'officer') ? 'global' : 'unit'
+  );
 
   // Subscribe to Unit Credits
   useEffect(() => {
@@ -342,9 +346,245 @@ export default function Dashboard({
 
   const PIE_COLORS = ['#10B981', '#059669', '#3B82F6', '#F59E0B', '#8B5CF6', '#EC4899'];
 
+  // Calculate aggregate metrics for all unit credits (for Admin/Officer)
+  const depotTotalAllocated = useMemo(() => {
+    return unitCredits.reduce((sum, uc) => sum + (uc.allocatedLimit || 0), 0);
+  }, [unitCredits]);
+
+  const depotTotalUsed = useMemo(() => {
+    return unitCredits.reduce((sum, uc) => sum + (uc.usedCredit || 0), 0);
+  }, [unitCredits]);
+
+  const depotTotalRemaining = useMemo(() => {
+    return Math.max(0, depotTotalAllocated - depotTotalUsed);
+  }, [depotTotalAllocated, depotTotalUsed]);
+
+  // Determine current unit selection totals
+  const activeUnitAllocated = useMemo(() => {
+    if (userRole === 'admin' || userRole === 'officer') {
+      return selectedUnitData ? (selectedUnitData.allocatedLimit || 0) : depotTotalAllocated;
+    }
+    const myCredit = unitCredits.find(uc => uc.unit === currentUser?.department);
+    return myCredit ? (myCredit.allocatedLimit || 0) : 0;
+  }, [userRole, selectedUnitData, currentUser, unitCredits, depotTotalAllocated]);
+
+  const activeUnitUsed = useMemo(() => {
+    if (userRole === 'admin' || userRole === 'officer') {
+      return selectedUnitData ? (selectedUnitData.usedCredit || 0) : depotTotalUsed;
+    }
+    const myCredit = unitCredits.find(uc => uc.unit === currentUser?.department);
+    return myCredit ? (myCredit.usedCredit || 0) : 0;
+  }, [userRole, selectedUnitData, currentUser, unitCredits, depotTotalUsed]);
+
+  const activeUnitRemaining = useMemo(() => {
+    return Math.max(0, activeUnitAllocated - activeUnitUsed);
+  }, [activeUnitAllocated, activeUnitUsed]);
+
+  const displayAllocated = useMemo(() => {
+    if (overviewMode === 'global') return depotTotalAllocated;
+    return activeUnitAllocated;
+  }, [overviewMode, depotTotalAllocated, activeUnitAllocated]);
+
+  const displayUsed = useMemo(() => {
+    if (overviewMode === 'global') return depotTotalUsed;
+    return activeUnitUsed;
+  }, [overviewMode, depotTotalUsed, activeUnitUsed]);
+
+  const displayRemaining = useMemo(() => {
+    return Math.max(0, displayAllocated - displayUsed);
+  }, [displayAllocated, displayUsed]);
+
   return (
     <div id="dashboard_view" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
-      
+
+      {/* 0. Top Metrics Row: โควตา, ยอดรับ, จ่ายออก [Grid Span: 12 Cols] */}
+      <motion.section 
+        id="top_quota_overview" 
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="col-span-1 md:col-span-2 lg:col-span-12 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl relative overflow-hidden"
+      >
+        {/* Background ambient accents */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none -z-10"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl pointer-events-none -z-10"></div>
+
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/60 pb-5 mb-5">
+          <div>
+            <div className="flex items-center gap-2 text-emerald-400 font-mono text-[10px] tracking-wider uppercase mb-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>QUOTA & CONSUMPTION ANALYTICS</span>
+            </div>
+            <h2 className="text-lg font-black text-white tracking-tight flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-emerald-400" />
+              แผงวิเคราะห์โควตา ยอดรับ และยอดจ่ายออกสะสม
+            </h2>
+            <p className="text-slate-400 text-xs mt-0.5">
+              ติดตามสัดส่วนโควตาจำกัด (Allocated), ปริมาณสั่งจ่ายจริงสะสม (Discharged) และปริมาณที่เบิกจ่ายได้คงเหลือ (Remaining)
+            </p>
+          </div>
+
+          {/* Toggle Button for Admin/Officer */}
+          {(userRole === 'admin' || userRole === 'officer') && (
+            <div className="flex bg-slate-950 p-1.5 rounded-2xl border border-slate-800 self-start md:self-center gap-1">
+              <button
+                onClick={() => setOverviewMode('global')}
+                className={`px-4 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  overviewMode === 'global'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                ภาพรวมทั้งคลัง มทบ.44
+              </button>
+              <button
+                onClick={() => setOverviewMode('unit')}
+                className={`px-4 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  overviewMode === 'unit'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                เจาะลึกรายหน่วยงาน
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 3 Columns Metrics Group */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          
+          {/* Card 1: ยอดรับโควตาทั้งหมด (Allocated) */}
+          <div className="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition">
+              <ArrowDownCircle className="h-24 w-24 text-emerald-400" />
+            </div>
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block">
+                1. ยอดรับโควตา (Allocated)
+              </span>
+              <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
+                <ArrowDownCircle className="h-5 w-5" />
+              </div>
+            </div>
+            <div>
+              <div className="text-2xl sm:text-3xl font-black text-white font-mono leading-none">
+                {displayAllocated.toLocaleString()}{' '}
+                <span className="text-xs font-normal text-slate-400">ลิตร</span>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-2 leading-tight">
+                {overviewMode === 'global' ? 'โควตากระแสกลางรวมทุกหน่วยงาน มทบ.44' : `โควตารับทั้งหมดของ ${selectedUnitData?.unit || currentUser?.department}`}
+              </p>
+            </div>
+          </div>
+
+          {/* Card 2: ยอดเบิกจ่ายออก (Disbursed) */}
+          <div className="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition">
+              <ArrowUpCircle className="h-24 w-24 text-amber-400" />
+            </div>
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block">
+                2. ยอดจ่ายออกสะสม (Discharged)
+              </span>
+              <div className="p-2 bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/20">
+                <ArrowUpCircle className="h-5 w-5" />
+              </div>
+            </div>
+            <div>
+              <div className="text-2xl sm:text-3xl font-black text-amber-500 font-mono leading-none">
+                {displayUsed.toLocaleString()}{' '}
+                <span className="text-xs font-normal text-slate-400">ลิตร</span>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-2 leading-tight">
+                {overviewMode === 'global' ? 'ปริมาณที่สั่งจ่ายน้ำมันจริงสะสมของคลัง มทบ.44' : `ยอดน้ำมันที่เบิกไปแล้วของหน่วย ${selectedUnitData?.unit || currentUser?.department}`}
+              </p>
+            </div>
+          </div>
+
+          {/* Card 3: โควตาคงเหลือ (Remaining) */}
+          <div className="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition">
+              <CreditCard className="h-24 w-24 text-blue-400" />
+            </div>
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block">
+                3. โควตาคงเหลือ (Remaining)
+              </span>
+              <div className="p-2 bg-blue-500/10 text-blue-400 rounded-xl border border-blue-500/20">
+                <CreditCard className="h-5 w-5" />
+              </div>
+            </div>
+            <div>
+              <div className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono leading-none flex items-baseline justify-between">
+                <span>
+                  {displayRemaining.toLocaleString()}{' '}
+                  <span className="text-xs font-normal text-slate-400">ลิตร</span>
+                </span>
+                {displayAllocated > 0 && (
+                  <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-md font-bold">
+                    {((displayRemaining / displayAllocated) * 100).toFixed(1)}%
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-slate-400 mt-2 leading-tight">
+                {overviewMode === 'global' ? 'ปริมาณโควตารวมที่ยังคงเหลือสั่งจ่ายได้' : `วงเงินโควตาคงเหลือสำหรับเบิกของหน่วยงานนี้`}
+              </p>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Progress bar covering consumption */}
+        {displayAllocated > 0 && (
+          <div className="mt-5 pt-4 border-t border-slate-800/60">
+            <div className="flex justify-between items-center text-[11px] text-slate-400 mb-1.5">
+              <div className="flex items-center gap-1.5 font-bold">
+                <span className="text-slate-300">อัตราการบริโภคสะสม:</span>
+                <span className={displayUsed > displayAllocated ? "text-red-400" : (displayUsed / displayAllocated) > 0.85 ? "text-amber-400" : "text-emerald-400"}>
+                  {((displayUsed / displayAllocated) * 100).toFixed(1)}% ของโควตา
+                </span>
+              </div>
+              <span className="font-mono text-slate-500">
+                {displayUsed.toLocaleString()} / {displayAllocated.toLocaleString()} ลิตร
+              </span>
+            </div>
+            <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  displayUsed > displayAllocated
+                    ? 'bg-red-500'
+                    : (displayUsed / displayAllocated) > 0.85
+                    ? 'bg-amber-500 animate-pulse'
+                    : 'bg-emerald-500'
+                }`}
+                style={{ width: `${Math.min(100, (displayUsed / displayAllocated) * 100)}%` }}
+              ></div>
+            </div>
+          </div>
+        )}
+
+        {/* Selector overlay helper if in unit mode and admin/officer */}
+        {overviewMode === 'unit' && (userRole === 'admin' || userRole === 'officer') && (
+          <div className="mt-4 p-3 bg-slate-950/40 rounded-xl border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 animate-fadeIn">
+            <span className="text-xs text-slate-400 flex items-center gap-1.5">
+              <Building className="h-3.5 w-3.5 text-blue-400" />
+              <span>สลับวิเคราะห์รายหน่วยงานได้รวดเร็ว:</span>
+            </span>
+            <select
+              value={selectedUnitId}
+              onChange={(e) => setSelectedUnitId(e.target.value)}
+              className="bg-slate-900 border border-slate-700 rounded-lg py-1 px-3 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer max-w-xs"
+            >
+              {unitCredits.map((uc) => (
+                <option key={uc.id} value={uc.id}>{uc.unit}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+      </motion.section>
+
       {/* 1. Daily Summary Card (Primary) [Grid Span: 4 Cols] */}
       <section id="bento_daily_summary" className="lg:col-span-4 bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl border border-slate-700/80 p-6 flex flex-col justify-between min-h-[220px] shadow-lg">
         <div className="flex justify-between items-start">

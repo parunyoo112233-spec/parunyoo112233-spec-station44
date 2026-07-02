@@ -7,7 +7,7 @@
       "properties": {
         "uid": { "type": "string" },
         "email": { "type": "string" },
-        "role": { "type": "string", "enum": ["officer", "user"] },
+        "role": { "type": "string", "enum": ["admin", "officer", "user"] },
         "name": { "type": "string" },
         "rank": { "type": "string" },
         "department": { "type": "string" },
