@@ -564,6 +564,63 @@ export default function Dashboard({
           </div>
         )}
 
+        {/* Remaining Fuel by Type for Unit */}
+        {overviewMode === 'unit' && selectedUnitData && selectedUnitData.quotas && Object.keys(selectedUnitData.quotas).length > 0 && (
+          <div className="mt-6 pt-4 border-t border-slate-800/60">
+            <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <Building className="h-4 w-4 text-emerald-400" />
+              ปริมาณน้ำมันคงเหลือของ {selectedUnitData.unit} แยกตามประเภท:
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {Object.entries(selectedUnitData.quotas).map(([fuelType, quotaData]) => {
+                const q = quotaData as any;
+                const limit = q.allocatedLimit || 0;
+                const used = q.usedCredit || 0;
+                const remaining = Math.max(0, limit - used);
+                const pctRemaining = limit > 0 ? (remaining / limit) * 100 : 0;
+                
+                // Color codes
+                const isDiesel = fuelType.includes('ดีเซล');
+                const themeColor = isDiesel ? 'from-blue-950/40 to-cyan-950/20' : 'from-amber-950/40 to-yellow-950/20';
+                const textColor = isDiesel ? 'text-blue-400' : 'text-amber-400';
+                const borderColor = isDiesel ? 'border-blue-900/40' : 'border-amber-900/40';
+                const progressColor = isDiesel ? 'bg-gradient-to-r from-blue-500 to-cyan-400' : 'bg-gradient-to-r from-amber-500 to-yellow-400';
+
+                return (
+                  <div key={fuelType} className={`bg-gradient-to-b ${themeColor} border ${borderColor} p-4 rounded-xl flex flex-col justify-between relative overflow-hidden group hover:border-slate-700 transition`}>
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="text-[11px] font-bold text-slate-200 truncate max-w-[150px]">{fuelType}</span>
+                      <span className={`text-[10px] font-bold ${textColor} bg-slate-950/80 px-1.5 py-0.5 rounded border border-slate-800`}>
+                        เหลือ {pctRemaining.toFixed(0)}%
+                      </span>
+                    </div>
+                    
+                    <div className="space-y-1 mt-1">
+                      <div className="text-xl font-black text-white font-mono flex items-baseline gap-1">
+                        {remaining.toLocaleString()}
+                        <span className="text-[10px] font-normal text-slate-400">ลิตร</span>
+                      </div>
+                      
+                      {/* Bar indicator */}
+                      <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-900">
+                        <div 
+                          className={`h-full rounded-full transition-all duration-500 ${progressColor}`}
+                          style={{ width: `${Math.min(100, pctRemaining)}%` }}
+                        ></div>
+                      </div>
+                      
+                      <div className="flex justify-between text-[8px] text-slate-500 font-mono">
+                        <span>ใช้ไป {used.toLocaleString()} ล.</span>
+                        <span>ทั้งหมด {limit.toLocaleString()} ล.</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Selector overlay helper if in unit mode and admin/officer */}
         {overviewMode === 'unit' && (userRole === 'admin' || userRole === 'officer') && (
           <div className="mt-4 p-3 bg-slate-950/40 rounded-xl border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 animate-fadeIn">

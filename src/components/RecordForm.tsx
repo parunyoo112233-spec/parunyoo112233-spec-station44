@@ -105,19 +105,6 @@ export default function RecordForm({ currentUser, inventory, onRecordAdded }: Re
       return;
     }
 
-    // Quota Validation for specific fuel type
-    if (matchedUnitCredit) {
-      if (specificQuota) {
-        if (Number(volume) > remainingQuota) {
-          setError(`ยอดเบิก (${volume} ลิตร) เกินกว่าโควตาคงเหลือของหน่วยงานสำหรับ ${fuelType} (คงเหลือ ${(remainingQuota ?? 0).toLocaleString()} ลิตร)`);
-          return;
-        }
-      } else {
-        setError(`หน่วยงานนี้ไม่มีสิทธิ์การเบิกจ่ายสำหรับ ${fuelType} กรุณาติดต่อผู้ดูแลระบบเพื่อจัดสรรโควตา`);
-        return;
-      }
-    }
-
     setLoading(true);
 
     try {

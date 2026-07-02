@@ -443,23 +443,6 @@ export async function approveFuelRequest(
 
   const requestData = reqSnap.data() as Omit<FuelRequest, 'id'>;
 
-  // Verify unit credit/quota first!
-  const creditDocRef = doc(db, 'unit_credits', requestData.unit);
-  const creditSnap = await getDoc(creditDocRef);
-  if (creditSnap.exists()) {
-    const creditData = creditSnap.data() as UnitCredit;
-    const quotas = creditData.quotas || {
-      'น้ำมันดีเซล': { allocatedLimit: creditData.allocatedLimit || 5000, usedCredit: creditData.usedCredit },
-      'น้ำมันแก๊สโซฮอล์ 95': { allocatedLimit: 0, usedCredit: 0 },
-      'น้ำมันแก๊สโซฮอล์ 91': { allocatedLimit: 0, usedCredit: 0 }
-    };
-    const specificQuota = quotas[requestData.fuelType] || { allocatedLimit: 0, usedCredit: 0 };
-    const remainingQuota = specificQuota.allocatedLimit - specificQuota.usedCredit;
-    if (requestData.volume > remainingQuota) {
-      throw new Error(`ยอดเบิก (${requestData.volume} ลิตร) เกินกว่าโควตาคงเหลือของหน่วยงานสำหรับ ${requestData.fuelType} (คงเหลือ ${remainingQuota.toLocaleString()} ลิตร)`);
-    }
-  }
-
   // 1. Update request status
   await updateDoc(reqDocRef, {
     status: 'approved',

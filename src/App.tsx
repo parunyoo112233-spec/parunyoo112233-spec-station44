@@ -42,7 +42,7 @@ import {
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [authChecking, setAuthChecking] = useState(true);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('credits');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
@@ -170,6 +170,15 @@ export default function App() {
     };
   }, [currentUser]);
 
+  // Redirect general users (role === 'user') away from admin/officer only views
+  useEffect(() => {
+    if (currentUser && currentUser.role === 'user') {
+      if (activeTab === 'dashboard' || activeTab === 'inventory') {
+        setActiveTab('request');
+      }
+    }
+  }, [currentUser, activeTab]);
+
   // Handle Sign Out
   const handleSignOut = async () => {
     try {
@@ -177,11 +186,11 @@ export default function App() {
       sessionStorage.removeItem('demo_user_profile');
       await signOut(auth);
       setCurrentUser(null);
-      setActiveTab('dashboard');
+      setActiveTab('credits');
     } catch (err) {
       console.error('Logout error: ', err);
       setCurrentUser(null);
-      setActiveTab('dashboard');
+      setActiveTab('credits');
     }
   };
 
@@ -529,20 +538,35 @@ export default function App() {
       <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur border-t border-slate-800 py-2.5 z-40 px-4 shadow-xl">
         <div className="max-w-xl mx-auto grid grid-flow-col auto-cols-max justify-around items-center gap-2">
           
-          {/* 1. Dashboard Tab */}
+          {/* 1. Credits & Reports Tab */}
           <button
-            onClick={() => setActiveTab('dashboard')}
+            onClick={() => setActiveTab('credits')}
             className={`flex flex-col items-center justify-center w-14 py-1 rounded-xl transition cursor-pointer ${
-              activeTab === 'dashboard'
+              activeTab === 'credits'
                 ? 'text-emerald-400 font-bold bg-slate-800/60'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            <LayoutDashboard className="h-5 w-5" />
-            <span className="text-[10px] mt-1 font-medium">ภาพรวม</span>
+            <CreditCard className="h-5 w-5" />
+            <span className="text-[10px] mt-1 font-medium">โควตา/ยอด</span>
           </button>
 
-          {/* 2. Record/Request Tab (Role based dynamic action) */}
+          {/* 2. Dashboard Tab */}
+          {currentUser.role !== 'user' && (
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={`flex flex-col items-center justify-center w-14 py-1 rounded-xl transition cursor-pointer ${
+                activeTab === 'dashboard'
+                  ? 'text-emerald-400 font-bold bg-slate-800/60'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <LayoutDashboard className="h-5 w-5" />
+              <span className="text-[10px] mt-1 font-medium">ภาพรวม</span>
+            </button>
+          )}
+
+          {/* 3. Record/Request Tab (Role based dynamic action) */}
           {(currentUser.role === 'admin' || currentUser.role === 'officer') ? (
             <button
               onClick={() => setActiveTab('record')}
@@ -569,7 +593,7 @@ export default function App() {
             </button>
           )}
 
-          {/* 3. Requests Queue Tab with Badge */}
+          {/* 4. Requests Queue Tab with Badge */}
           <button
             onClick={() => setActiveTab('requests')}
             className={`flex flex-col items-center justify-center w-14 py-1 rounded-xl transition relative cursor-pointer ${
@@ -587,7 +611,7 @@ export default function App() {
             )}
           </button>
 
-          {/* 4. History Logs Tab */}
+          {/* 5. History Logs Tab */}
           <button
             onClick={() => setActiveTab('records')}
             className={`flex flex-col items-center justify-center w-14 py-1 rounded-xl transition cursor-pointer ${
@@ -600,31 +624,20 @@ export default function App() {
             <span className="text-[10px] mt-1 font-medium">ประวัติ</span>
           </button>
 
-          {/* 5. Inventory Stock Tab */}
-          <button
-            onClick={() => setActiveTab('inventory')}
-            className={`flex flex-col items-center justify-center w-14 py-1 rounded-xl transition cursor-pointer ${
-              activeTab === 'inventory'
-                ? 'text-emerald-400 font-bold bg-slate-800/60'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Warehouse className="h-5 w-5" />
-            <span className="text-[10px] mt-1 font-medium">คลังน้ำมัน</span>
-          </button>
-
-          {/* 6. Credits & Reports Tab */}
-          <button
-            onClick={() => setActiveTab('credits')}
-            className={`flex flex-col items-center justify-center w-14 py-1 rounded-xl transition cursor-pointer ${
-              activeTab === 'credits'
-                ? 'text-emerald-400 font-bold bg-slate-800/60'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <CreditCard className="h-5 w-5" />
-            <span className="text-[10px] mt-1 font-medium">โควตา/ยอด</span>
-          </button>
+          {/* 6. Inventory Stock Tab */}
+          {currentUser.role !== 'user' && (
+            <button
+              onClick={() => setActiveTab('inventory')}
+              className={`flex flex-col items-center justify-center w-14 py-1 rounded-xl transition cursor-pointer ${
+                activeTab === 'inventory'
+                  ? 'text-emerald-400 font-bold bg-slate-800/60'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Warehouse className="h-5 w-5" />
+              <span className="text-[10px] mt-1 font-medium">คลังน้ำมัน</span>
+            </button>
+          )}
 
           {/* 7. User Management Tab (Admin only) */}
           {currentUser.role === 'admin' && (
