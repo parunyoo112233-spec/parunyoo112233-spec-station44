@@ -1,0 +1,6 @@
+{
+  "name": "คลังน้ำมัน มทบ.44",
+  "description": "ระบบบันทึกการจ่ายน้ำมันและสรุปยอดรายวัน/รายเดือน สำหรับสถานีน้ำมัน คลัง มทบ.44",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

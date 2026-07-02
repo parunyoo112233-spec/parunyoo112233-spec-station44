@@ -1,0 +1,148 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with role and organization info",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["officer", "user"] },
+        "name": { "type": "string" },
+        "rank": { "type": "string" },
+        "department": { "type": "string" },
+        "phone": { "type": "string" }
+      },
+      "required": ["uid", "email", "role", "name", "rank", "department"]
+    },
+    "FuelRecord": {
+      "title": "FuelRecord",
+      "description": "Historical fuel dispense record",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "vehicleNo": { "type": "string" },
+        "vehicleType": { "type": "string" },
+        "unit": { "type": "string" },
+        "driverName": { "type": "string" },
+        "fuelType": { "type": "string" },
+        "volume": { "type": "number" },
+        "odometer": { "type": "number" },
+        "orderNo": { "type": "string" },
+        "purpose": { "type": "string" },
+        "officerId": { "type": "string" },
+        "officerName": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": [
+        "date",
+        "time",
+        "vehicleNo",
+        "vehicleType",
+        "unit",
+        "driverName",
+        "fuelType",
+        "volume",
+        "odometer",
+        "orderNo",
+        "purpose",
+        "officerId",
+        "officerName",
+        "createdAt"
+      ]
+    },
+    "FuelRequest": {
+      "title": "FuelRequest",
+      "description": "Fuel request from drivers",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "vehicleNo": { "type": "string" },
+        "vehicleType": { "type": "string" },
+        "unit": { "type": "string" },
+        "driverName": { "type": "string" },
+        "fuelType": { "type": "string" },
+        "volume": { "type": "number" },
+        "odometer": { "type": "number" },
+        "orderNo": { "type": "string" },
+        "purpose": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "requestedBy": { "type": "string" },
+        "requestedByName": { "type": "string" },
+        "approvedBy": { "type": "string" },
+        "approvedByName": { "type": "string" },
+        "rejectedReason": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": [
+        "date",
+        "vehicleNo",
+        "vehicleType",
+        "unit",
+        "driverName",
+        "fuelType",
+        "volume",
+        "odometer",
+        "purpose",
+        "status",
+        "requestedBy",
+        "requestedByName",
+        "createdAt"
+      ]
+    },
+    "FuelInventory": {
+      "title": "FuelInventory",
+      "description": "Fuel stock levels",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fuelType": { "type": "string" },
+        "currentStock": { "type": "number" },
+        "capacity": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "fuelType", "currentStock", "capacity", "updatedAt"]
+    },
+    "UnitCredit": {
+      "title": "UnitCredit",
+      "description": "Fuel allocation and credit limit for military units",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "unit": { "type": "string" },
+        "allocatedLimit": { "type": "number" },
+        "usedCredit": { "type": "number" },
+        "lastResetDate": { "type": "string" },
+        "updatedAt": { "type": "number" },
+        "quotas": {
+          "type": "object",
+          "description": "Quotas and usages split by fuel types"
+        }
+      },
+      "required": ["id", "unit", "allocatedLimit", "usedCredit", "lastResetDate", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "users/{uid}": {
+      "schema": "UserProfile",
+      "description": "User profiles"
+    },
+    "fuel_records/{recordId}": {
+      "schema": "FuelRecord",
+      "description": "Fuel dispense logs"
+    },
+    "fuel_requests/{requestId}": {
+      "schema": "FuelRequest",
+      "description": "Submitted fuel requests"
+    },
+    "fuel_inventory/{inventoryId}": {
+      "schema": "FuelInventory",
+      "description": "Inventory storage for fuel types"
+    },
+    "unit_credits/{unitId}": {
+      "schema": "UnitCredit",
+      "description": "Unit fuel quota limits and current consumption"
+    }
+  }
+}
