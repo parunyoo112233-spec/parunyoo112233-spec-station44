@@ -5,7 +5,8 @@
 
 import React, { useState, useMemo } from 'react';
 import { FuelRecord, FuelInventory, UserProfile } from '../types';
-import { Calendar, Search, Filter, Printer, Download, FileText, ChevronDown, CheckCircle } from 'lucide-react';
+import { Calendar, Search, Filter, Printer, Download, FileText, ChevronDown, CheckCircle, Trash2, RefreshCw } from 'lucide-react';
+import { deleteFuelRecord } from '../lib/db-helpers';
 
 interface RecordHistoryProps {
   records: FuelRecord[];
@@ -14,6 +15,26 @@ interface RecordHistoryProps {
 }
 
 export default function RecordHistory({ records, inventory, currentUser }: RecordHistoryProps) {
+  // Deleting State
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+
+  const handleDeleteRecord = async (recordId: string) => {
+    if (!window.confirm('คุณแน่ใจหรือไม่ที่จะลบรายการประวัติการเติมน้ำมันนี้?\nการลบจะย้อนคืนยอดโควตาเครดิตของหน่วยงาน และคืนยอดน้ำมันเข้าคลังใหญ่โดยอัตโนมัติ')) {
+      return;
+    }
+
+    setIsDeleting(recordId);
+    try {
+      await deleteFuelRecord(recordId);
+      alert('ลบรายการประวัติการเติมน้ำมันและคืนค่าเรียบร้อยแล้ว');
+    } catch (error: any) {
+      console.error('Error deleting record:', error);
+      alert('เกิดข้อผิดพลาดในการลบรายการ: ' + error.message);
+    } finally {
+      setIsDeleting(null);
+    }
+  };
+
   // Filters state
   const [filterType, setFilterType] = useState<'all' | 'daily' | 'monthly'>('all');
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -523,6 +544,7 @@ export default function RecordHistory({ records, inventory, currentUser }: Recor
                 <th scope="col" className="px-4 py-3.5">ประเภทน้ำมัน</th>
                 <th scope="col" className="px-4 py-3.5 text-right">จำนวนลิตร</th>
                 <th scope="col" className="px-5 py-3.5 text-right">ผู้บันทึกจ่าย</th>
+                {currentUser?.role === 'admin' && <th scope="col" className="px-4 py-3.5 text-center">จัดการ</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700/40">
@@ -556,12 +578,24 @@ export default function RecordHistory({ records, inventory, currentUser }: Recor
                   <td className="px-5 py-4 text-right text-xs text-slate-400">
                     {rec.officerName}
                   </td>
+                  {currentUser?.role === 'admin' && (
+                    <td className="px-4 py-4 text-center whitespace-nowrap">
+                      <button
+                        onClick={() => handleDeleteRecord(rec.id)}
+                        disabled={isDeleting === rec.id}
+                        className="p-1.5 hover:bg-red-500/10 text-slate-500 hover:text-red-400 rounded-lg transition-all cursor-pointer disabled:opacity-50"
+                        title="ลบรายการบันทึกนี้และย้อนคืนสต็อก/โควตา"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
 
               {filteredRecords.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={currentUser?.role === 'admin' ? 8 : 7} className="px-6 py-12 text-center text-slate-500">
                     ไม่พบรายการเบิกน้ำมันตามตัวกรองที่เลือก
                   </td>
                 </tr>
@@ -615,6 +649,18 @@ export default function RecordHistory({ records, inventory, currentUser }: Recor
                     {rec.officerName} • {rec.date.split('-').reverse().join('/')} ({rec.time} น.)
                   </span>
                 </div>
+                {currentUser?.role === 'admin' && (
+                  <div className="flex justify-end pt-2 border-t border-slate-700/30">
+                    <button
+                      onClick={() => handleDeleteRecord(rec.id)}
+                      disabled={isDeleting === rec.id}
+                      className="flex items-center gap-1 px-2 py-1 bg-red-500/15 hover:bg-red-500/25 text-red-400 rounded-lg text-[10px] font-bold transition cursor-pointer disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      <span>ลบประวัติ</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}

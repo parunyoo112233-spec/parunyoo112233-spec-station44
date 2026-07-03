@@ -18,7 +18,9 @@ import {
   unitCreditsCol,
   unitReceiptsCol,
   addUnitFuelReceipt,
-  deleteUnitFuelReceipt
+  deleteUnitFuelReceipt,
+  isMockMode,
+  getMockCollection
 } from '../lib/db-helpers';
 import { onSnapshot, query, orderBy } from 'firebase/firestore';
 import { 
@@ -130,6 +132,21 @@ export default function UnitCreditsAndReports({
   // Subscribe to Unit Credits Real-Time Update
   useEffect(() => {
     setIsLoading(true);
+
+    if (isMockMode()) {
+      const loadMockCredits = () => {
+        const credits = getMockCollection<UnitCredit>('unit_credits');
+        credits.sort((a, b) => b.allocatedLimit - a.allocatedLimit);
+        setUnitCredits(credits);
+        setIsLoading(false);
+      };
+      loadMockCredits();
+      window.addEventListener('mock-db-update', loadMockCredits);
+      return () => {
+        window.removeEventListener('mock-db-update', loadMockCredits);
+      };
+    }
+
     const q = query(unitCreditsCol);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const credits: UnitCredit[] = [];
@@ -149,6 +166,19 @@ export default function UnitCreditsAndReports({
 
   // Subscribe to Unit Fuel Receipts Real-Time Update
   useEffect(() => {
+    if (isMockMode()) {
+      const loadMockReceipts = () => {
+        const list = getMockCollection<UnitFuelReceipt>('unit_receipts');
+        list.sort((a, b) => b.createdAt - a.createdAt);
+        setReceipts(list);
+      };
+      loadMockReceipts();
+      window.addEventListener('mock-db-update', loadMockReceipts);
+      return () => {
+        window.removeEventListener('mock-db-update', loadMockReceipts);
+      };
+    }
+
     const q = query(unitReceiptsCol);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list: UnitFuelReceipt[] = [];

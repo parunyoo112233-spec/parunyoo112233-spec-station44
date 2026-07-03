@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { onSnapshot, collection, query, orderBy } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { initializeDatabase, getUserProfile } from './lib/db-helpers';
+import { initializeDatabase, getUserProfile, isMockMode, getMockCollection } from './lib/db-helpers';
 import { UserProfile, FuelInventory, FuelRecord, FuelRequest } from './types';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
@@ -120,6 +120,22 @@ export default function App() {
   // 2. Real-Time Subscriptions when user is Authenticated
   useEffect(() => {
     if (!currentUser) return;
+
+    if (isMockMode()) {
+      const loadMockData = () => {
+        setInventory(getMockCollection<FuelInventory>('fuel_inventory'));
+        setRecords(getMockCollection<FuelRecord>('fuel_records'));
+        setRequests(getMockCollection<FuelRequest>('fuel_requests'));
+        setUsersList(getMockCollection<UserProfile>('users'));
+      };
+
+      loadMockData();
+
+      window.addEventListener('mock-db-update', loadMockData);
+      return () => {
+        window.removeEventListener('mock-db-update', loadMockData);
+      };
+    }
 
     // Subscribe to Inventory
     const unsubInv = onSnapshot(collection(db, 'fuel_inventory'), (snapshot) => {

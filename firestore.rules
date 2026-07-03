@@ -31,7 +31,8 @@ service cloud.firestore {
     match /fuel_records/{recordId} {
       allow read: if isSignedIn();
       allow create: if isOfficerOrAdmin();
-      allow update, delete: if isOfficerOrAdmin();
+      allow update: if isOfficerOrAdmin();
+      allow delete: if isSignedIn() && getUserData().role == 'admin';
     }
     
     // Fuel Requests
