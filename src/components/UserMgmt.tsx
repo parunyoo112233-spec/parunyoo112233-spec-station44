@@ -17,11 +17,13 @@ import {
   AlertCircle, 
   Phone, 
   Building,
-  Mail
+  Mail,
+  Database
 } from 'lucide-react';
 import { db, doc, deleteDoc, onSnapshot, collection } from '../firebase';
 import { UserProfile, UserRole } from '../types';
 import { updateUserRole, updateUserStatus } from '../lib/db-helpers';
+import DatabaseMigrationModal from './DatabaseMigrationModal';
 
 interface UserMgmtProps {
   currentUser: UserProfile;
@@ -37,6 +39,7 @@ export default function UserMgmt({ currentUser }: UserMgmtProps) {
   const [editingRole, setEditingRole] = useState<UserRole>('user');
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [isMigrationModalOpen, setIsMigrationModalOpen] = useState(false);
 
   // Subscribe to real-time users collection updates
   useEffect(() => {
@@ -155,8 +158,17 @@ export default function UserMgmt({ currentUser }: UserMgmtProps) {
             กำหนดสิทธิ์การใช้งานสำหรับ แอดมิน, เจ้าหน้าที่คลัง, และผู้ใช้บริการ (ผู้ใช้)
           </p>
         </div>
-        <div className="text-xs bg-slate-800 border border-slate-700/60 px-3 py-1.5 rounded-xl text-slate-400 font-mono">
-          จำนวนผู้ใช้งานทั้งหมด: <span className="text-white font-bold">{users.length}</span> ราย
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setIsMigrationModalOpen(true)}
+            className="flex items-center gap-1.5 text-xs bg-amber-500/10 border border-amber-500/25 text-amber-300 px-3 py-2 rounded-xl hover:bg-amber-500/20 transition cursor-pointer font-semibold shadow-md animate-pulse hover:animate-none"
+          >
+            <Database className="h-4 w-4 text-amber-400 animate-bounce" />
+            ย้ายข้อมูลจาก Firestore
+          </button>
+          <div className="text-xs bg-slate-800 border border-slate-700/60 px-3 py-2 rounded-xl text-slate-400 font-mono">
+            จำนวนผู้ใช้งานทั้งหมด: <span className="text-white font-bold">{users.length}</span> ราย
+          </div>
         </div>
       </div>
 
@@ -617,6 +629,12 @@ export default function UserMgmt({ currentUser }: UserMgmtProps) {
 
         </div>
       )}
+
+      {/* Database Migration Modal */}
+      <DatabaseMigrationModal 
+        isOpen={isMigrationModalOpen}
+        onClose={() => setIsMigrationModalOpen(false)}
+      />
 
     </div>
   );
