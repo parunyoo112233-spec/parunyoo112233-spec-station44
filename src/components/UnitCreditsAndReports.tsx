@@ -22,7 +22,7 @@ import {
   isMockMode,
   getMockCollection
 } from '../lib/db-helpers';
-import { onSnapshot, query, orderBy } from 'firebase/firestore';
+import { db, onSnapshot, query, orderBy } from '../firebase';
 import { 
   BarChart, 
   Bar, 

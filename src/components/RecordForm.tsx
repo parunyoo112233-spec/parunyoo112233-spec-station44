@@ -6,8 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { FuelInventory, UserProfile, FuelRecord, UnitCredit } from '../types';
 import { addFuelRecordAndDeductStock } from '../lib/db-helpers';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, collection, onSnapshot } from '../firebase';
 import { Fuel, Clipboard, Truck, User, Compass, PenTool, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 
 interface RecordFormProps {

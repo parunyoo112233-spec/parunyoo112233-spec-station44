@@ -4,9 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { onSnapshot, collection, query, orderBy } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { auth, db, onAuthStateChanged, signOut, onSnapshot, collection, query, orderBy } from './firebase';
 import { initializeDatabase, getUserProfile, isMockMode, getMockCollection } from './lib/db-helpers';
 import { UserProfile, FuelInventory, FuelRecord, FuelRequest } from './types';
 import Login from './components/Login';

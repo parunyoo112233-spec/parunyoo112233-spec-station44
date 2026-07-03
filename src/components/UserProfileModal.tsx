@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
-import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { doc, updateDoc, setDoc } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+import { auth, db, updatePassword, EmailAuthProvider, reauthenticateWithCredential, doc, updateDoc, setDoc } from '../firebase';
 import { UserProfile } from '../types';
 import { 
   X, 

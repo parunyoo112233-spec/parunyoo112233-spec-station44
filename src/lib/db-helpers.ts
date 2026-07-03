@@ -4,6 +4,8 @@
  */
 
 import { 
+  db, 
+  auth, 
   collection, 
   doc, 
   getDocs, 
@@ -14,10 +16,8 @@ import {
   deleteDoc,
   query, 
   orderBy, 
-  where,
-  runTransaction
-} from 'firebase/firestore';
-import { db, auth } from '../firebase';
+  where
+} from '../firebase';
 import { FuelInventory, FuelRecord, FuelRequest, UserProfile, UnitCredit, UserRole, UnitFuelReceipt } from '../types';
 
 // Helper to determine if we are operating in Mock/Demo mode (when firebase auth is not ready or mock user is logged in)

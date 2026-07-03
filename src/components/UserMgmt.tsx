@@ -19,8 +19,7 @@ import {
   Building,
   Mail
 } from 'lucide-react';
-import { db } from '../firebase';
-import { doc, deleteDoc, onSnapshot, collection } from 'firebase/firestore';
+import { db, doc, deleteDoc, onSnapshot, collection } from '../firebase';
 import { UserProfile, UserRole } from '../types';
 import { updateUserRole, updateUserStatus } from '../lib/db-helpers';
 

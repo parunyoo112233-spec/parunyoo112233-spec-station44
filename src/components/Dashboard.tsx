@@ -12,7 +12,7 @@ import {
   UserProfile,
   UnitCredit
 } from '../types';
-import { onSnapshot, query } from 'firebase/firestore';
+import { db, onSnapshot, query } from '../firebase';
 import { 
   ResponsiveContainer, 
   BarChart, 

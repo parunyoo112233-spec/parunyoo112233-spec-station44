@@ -4,11 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword 
-} from 'firebase/auth';
-import { auth } from '../firebase';
+import { auth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from '../firebase';
 import { saveUserProfile, getUserProfile } from '../lib/db-helpers';
 import { UserProfile, UserRole } from '../types';
 import { Fuel, Lock, Mail, User, Shield, Compass, Truck, Loader2, Briefcase } from 'lucide-react';
