@@ -5,14 +5,38 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// Configuration for Supabase
-const supabaseUrl = ((import.meta as any).env?.VITE_SUPABASE_URL) || '';
-const supabaseAnonKey = ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY) || '';
+// Configuration for Supabase with smart formatting and fallbacks
+let rawUrl = ((import.meta as any).env?.VITE_SUPABASE_URL) || '';
+let rawKey = ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY) || '';
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+// If rawUrl is a 20-character project reference ID (like 'wkqmckbtdkfpviprjbul'), convert to URL
+if (rawUrl && !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
+  rawUrl = `https://${rawUrl.trim()}.supabase.co`;
+}
+
+// If rawKey is a 20-character project reference ID and rawUrl is empty, use it to construct the URL
+if (rawKey && !rawKey.startsWith('http://') && !rawKey.startsWith('https://') && rawKey.length === 20 && !rawUrl) {
+  rawUrl = `https://${rawKey.trim()}.supabase.co`;
+}
+
+export const supabaseUrl = rawUrl;
+export const supabaseAnonKey = rawKey;
+
+// We need both the URL and a valid anon key (usually a long JWT starting with eyJ or new sb_publishable format)
+// If the key is just the project ID, warn that the real anon key is also needed.
+export const isSupabaseConfigured = Boolean(
+  supabaseUrl && 
+  supabaseAnonKey && 
+  (supabaseAnonKey.startsWith('eyJ') || supabaseAnonKey.startsWith('sb_publishable') || supabaseAnonKey.length > 25)
+);
 
 if (!isSupabaseConfigured) {
-  console.warn("Supabase is not configured yet. VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are missing. Falling back to local Mock Mode.");
+  console.warn(
+    "Supabase is not fully configured yet.\n" +
+    "- VITE_SUPABASE_URL: " + (supabaseUrl || "Missing") + "\n" +
+    "- VITE_SUPABASE_ANON_KEY: " + (supabaseAnonKey ? "Configured (starts with " + supabaseAnonKey.slice(0, 5) + "...)" : "Missing") + "\n" +
+    "Falling back to local Mock Mode."
+  );
 }
 
 export const supabase = createClient(
