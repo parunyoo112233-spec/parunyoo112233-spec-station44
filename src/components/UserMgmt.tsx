@@ -22,7 +22,7 @@ import {
 import { db } from '../firebase';
 import { doc, deleteDoc, onSnapshot, collection } from 'firebase/firestore';
 import { UserProfile, UserRole } from '../types';
-import { updateUserRole, updateUserStatus, isMockMode, getMockCollection, saveMockCollection } from '../lib/db-helpers';
+import { updateUserRole, updateUserStatus } from '../lib/db-helpers';
 
 interface UserMgmtProps {
   currentUser: UserProfile;
@@ -42,19 +42,6 @@ export default function UserMgmt({ currentUser }: UserMgmtProps) {
   // Subscribe to real-time users collection updates
   useEffect(() => {
     setLoading(true);
-
-    if (isMockMode()) {
-      const loadMockUsers = () => {
-        setUsers(getMockCollection<UserProfile>('users'));
-        setLoading(false);
-      };
-      loadMockUsers();
-      window.addEventListener('mock-db-update', loadMockUsers);
-      return () => {
-        window.removeEventListener('mock-db-update', loadMockUsers);
-      };
-    }
-
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
       const fetchedUsers: UserProfile[] = [];
       snapshot.forEach((doc) => {
@@ -129,13 +116,7 @@ export default function UserMgmt({ currentUser }: UserMgmtProps) {
     try {
       setErrorMessage('');
       setSuccessMessage('');
-      if (isMockMode()) {
-        const mockUsers = getMockCollection<UserProfile>('users');
-        const updatedUsers = mockUsers.filter(u => u.uid !== uid);
-        saveMockCollection('users', updatedUsers);
-      } else {
-        await deleteDoc(doc(db, 'users', uid));
-      }
+      await deleteDoc(doc(db, 'users', uid));
       setSuccessMessage(`ลบรายชื่อ "${userName}" เรียบร้อยแล้ว`);
       
       setTimeout(() => setSuccessMessage(''), 4000);
