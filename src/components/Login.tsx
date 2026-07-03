@@ -228,10 +228,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       return;
     }
 
-    const checkEmail = email.trim().toLowerCase();
-    const isSpecialAdmin = (checkEmail === 'admin' || checkEmail === 'admin@mthb44.com') && password === 'parunyoo';
-    const loginEmail = isSpecialAdmin ? 'admin@mthb44.com' : email;
-
     try {
       if (isSignUp) {
         try {
@@ -282,90 +278,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           }
         }
       } else {
-        if (isSpecialAdmin) {
-          try {
-            // First, try standard login with admin@mthb44.com / parunyoo
-            const userCredential = await signInWithEmailAndPassword(auth, 'admin@mthb44.com', 'parunyoo');
-            const user = userCredential.user;
-            
-            let profile = await getUserProfile(user.uid);
-            if (!profile) {
-              profile = {
-                uid: user.uid,
-                email: 'admin@mthb44.com',
-                role: 'admin',
-                name: 'ผู้ดูแลระบบ (Admin)',
-                rank: 'พ.อ.',
-                department: 'บก.มทบ.44',
-                position: 'ผู้ดูแลระบบ',
-                phone: '0812345678',
-                status: 'active'
-              };
-              await saveUserProfile(profile);
-            } else if (profile.role !== 'admin' || profile.status !== 'active') {
-              profile.role = 'admin';
-              profile.status = 'active';
-              await saveUserProfile(profile);
-            }
-            saveSession(profile);
-            onLoginSuccess(profile);
-            return;
-          } catch (authErr: any) {
-            console.warn("Special admin sign in error", authErr.code);
-            if (authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-credential') {
-              try {
-                // Auto create the special admin account in Firebase
-                const userCredential = await createUserWithEmailAndPassword(auth, 'admin@mthb44.com', 'parunyoo');
-                const user = userCredential.user;
-                const profile: UserProfile = {
-                  uid: user.uid,
-                  email: 'admin@mthb44.com',
-                  role: 'admin',
-                  name: 'ผู้ดูแลระบบ (Admin)',
-                  rank: 'พ.อ.',
-                  department: 'บก.มทบ.44',
-                  position: 'ผู้ดูแลระบบ',
-                  phone: '0812345678',
-                  status: 'active'
-                };
-                await saveUserProfile(profile);
-                saveSession(profile);
-                onLoginSuccess(profile);
-                return;
-              } catch (createErr) {
-                console.error("Failed to create special admin in Auth", createErr);
-              }
-            }
-            
-            // Bypass/Mock auth fallback if Firebase disabled or disallowed
-            console.warn("Falling back to special admin mock profile");
-            const mockUid = 'mock-admin-custom';
-            const profile: UserProfile = {
-              uid: mockUid,
-              email: 'admin@mthb44.com',
-              role: 'admin',
-              name: 'ผู้ดูแลระบบ (Admin)',
-              rank: 'พ.อ.',
-              department: 'บก.มทบ.44',
-              position: 'ผู้ดูแลระบบ',
-              phone: '0812345678',
-              status: 'active',
-              password: 'parunyoo'
-            };
-            try {
-              await saveUserProfile(profile);
-            } catch (dbErr) {
-              console.error("Firestore save failed in fallback", dbErr);
-            }
-            saveSession(profile);
-            onLoginSuccess(profile);
-            return;
-          }
-        }
-
         try {
-          // Login normally
-          const userCredential = await signInWithEmailAndPassword(auth, loginEmail, password);
+          // Login
+          const userCredential = await signInWithEmailAndPassword(auth, email, password);
           const user = userCredential.user;
           
           // Fetch profile
@@ -377,9 +292,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             // Fallback if auth exists but firestore profile missing
             const fallbackProfile: UserProfile = {
               uid: user.uid,
-              email: loginEmail,
+              email: email,
               role: 'user',
-              name: loginEmail.split('@')[0],
+              name: email.split('@')[0],
               rank: 'ส.ต.',
               department: 'มทบ.44',
               position: 'ผู้ใช้',
@@ -391,14 +306,14 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         } catch (authErr: any) {
           if (authErr.code === 'auth/operation-not-allowed' || authErr.message?.includes('operation-not-allowed')) {
             console.warn("Email/Password Auth disabled, falling back to local query or auto-create");
-            const mockUid = `mock-custom-${loginEmail.split('@')[0]}`;
+            const mockUid = `mock-custom-${email.split('@')[0]}`;
             let profile = await getUserProfile(mockUid);
             if (!profile) {
               profile = {
                 uid: mockUid,
-                email: loginEmail,
+                email: email,
                 role: 'user',
-                name: loginEmail.split('@')[0],
+                name: email.split('@')[0],
                 rank: 'ส.ต.',
                 department: 'มทบ.44',
                 position: 'ผู้ใช้',
@@ -473,16 +388,16 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           {/* Email field */}
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-slate-400 uppercase tracking-wider block">
-              อีเมลหรือไอดีผู้ใช้งาน (Email or ID)
+              อีเมลผู้ใช้งาน (Email)
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
                 <Mail className="h-4 w-4" />
               </span>
               <input
-                type={isSignUp ? "email" : "text"}
+                type="email"
                 required
-                placeholder={isSignUp ? "email@example.com" : "email@example.com หรือ admin"}
+                placeholder="email@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none text-white transition text-sm"
@@ -617,6 +532,22 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                   onChange={(e) => setPhone(e.target.value)}
                   className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl focus:border-emerald-500 outline-none text-white text-sm transition"
                 />
+              </div>
+
+              {/* Role Selection */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider block">
+                  สิทธิ์การเข้าใช้งานที่ต้องการขอ (Role)
+                </label>
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as UserRole)}
+                  className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl focus:border-emerald-500 outline-none text-white text-sm transition"
+                >
+                  <option value="user" className="bg-slate-900">ผู้ใช้บริการทั่วไป (User/Driver)</option>
+                  <option value="officer" className="bg-slate-900">เจ้าหน้าที่คลังเชื้อเพลิง (Officer)</option>
+                  <option value="admin" className="bg-slate-900">ผู้ดูแลระบบ (Admin)</option>
+                </select>
               </div>
 
             </div>

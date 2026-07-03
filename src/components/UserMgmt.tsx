@@ -22,7 +22,7 @@ import {
 import { db } from '../firebase';
 import { doc, deleteDoc, onSnapshot, collection } from 'firebase/firestore';
 import { UserProfile, UserRole } from '../types';
-import { updateUserRole, updateUserStatus, isMockMode, getMockCollection } from '../lib/db-helpers';
+import { updateUserRole, updateUserStatus } from '../lib/db-helpers';
 
 interface UserMgmtProps {
   currentUser: UserProfile;
@@ -42,20 +42,6 @@ export default function UserMgmt({ currentUser }: UserMgmtProps) {
   // Subscribe to real-time users collection updates
   useEffect(() => {
     setLoading(true);
-
-    if (isMockMode()) {
-      const loadMockUsers = () => {
-        const fetchedUsers = getMockCollection<UserProfile>('users');
-        setUsers(fetchedUsers);
-        setLoading(false);
-      };
-      loadMockUsers();
-      window.addEventListener('mock-db-update', loadMockUsers);
-      return () => {
-        window.removeEventListener('mock-db-update', loadMockUsers);
-      };
-    }
-
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
       const fetchedUsers: UserProfile[] = [];
       snapshot.forEach((doc) => {
